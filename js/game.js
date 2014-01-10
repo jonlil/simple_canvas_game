@@ -1,9 +1,20 @@
 // Create the canvas
 var canvas = document.createElement("canvas");
+var playerLog = document.createElement("div")
 var ctx = canvas.getContext("2d");
 canvas.width = 512;
 canvas.height = 480;
 document.body.appendChild(canvas);
+document.body.appendChild(playerLog);
+
+playerLog.style.position = 'absolute';
+playerLog.style.right = 0;
+playerLog.style.top = 0;
+playerLog.style.width = "400px";
+playerLog.style.borderStyle="solid";
+playerLog.style.borderWidth = "1px";
+playerLog.style.borderColor = '#000';
+
 
 // Background image
 var bgReady = false;
@@ -21,19 +32,39 @@ heroImage.onload = function () {
 };
 heroImage.src = "images/hero.png";
 
-// Monster image
-var monsterReady = false;
-var monsterImage = new Image();
-monsterImage.onload = function () {
-	monsterReady = true;
-};
-monsterImage.src = "images/monster.png";
+function Player () {
+	this.monstersCaught = 0;
+	this.points = 0;
+	this.pointsLog = [];
+
+	this.on('score', function (score) {
+		var log = {
+			value: score,
+			time: new Date().getTime()
+		};
+		var html = '<div>';
+		html += "<span>" + log.time + "</span><span> " + log.value + "</span>";
+		html += '</div>';
+		
+		this.points += score;
+		this.pointsLog.push(log);
+
+		playerLog.innerHTML = html + playerLog.innerHTML;
+	}.bind(this))
+}
+Player.prototype = new EventEmitter;
+Player.prototype.constructor = Player;
+
+var player = new Player();
+
+var monster = new Monster({ canvas: canvas, ctx: ctx });
+
 
 // Game objects
 var hero = {
 	speed: 256 // movement in pixels per second
 };
-var monster = {};
+
 var monstersCaught = 0;
 
 // Handle keyboard controls
@@ -51,51 +82,60 @@ addEventListener("keyup", function (e) {
 var reset = function () {
 	hero.x = canvas.width / 2;
 	hero.y = canvas.height / 2;
+};
 
-	// Throw the monster somewhere on the screen randomly
-	monster.x = 32 + (Math.random() * (canvas.width - 64));
-	monster.y = 32 + (Math.random() * (canvas.height - 64));
+
+var angle = function () {
+	if (38 in keysDown && 37 in keysDown) {
+		console.log(Math.atan2(0 - hero.y, 0 - hero.x));
+	}
 };
 
 // Update game objects
 var update = function (modifier) {
 	if (38 in keysDown) { // Player holding up
-		hero.y -= hero.speed * modifier;
+		if (hero.y - (hero.speed * modifier) >= 0) {
+			hero.y -= hero.speed * modifier;	
+		}
 	}
 	if (40 in keysDown) { // Player holding down
-		hero.y += hero.speed * modifier;
+		if (hero.y + (hero.speed * modifier) <= canvas.height) {
+			hero.y += hero.speed * modifier;
+		}
 	}
 	if (37 in keysDown) { // Player holding left
-		hero.x -= hero.speed * modifier;
+		if (hero.x - (hero.speed * modifier) >= 0) {
+			hero.x -= hero.speed * modifier;	
+		}
+		
 	}
 	if (39 in keysDown) { // Player holding right
-		hero.x += hero.speed * modifier;
+		if (hero.x + (hero.speed * modifier) <= canvas.width) {
+			hero.x += hero.speed * modifier;
+		}
 	}
-
+	if (32 in keysDown) {
+		
+	}
+	
 	// Are they touching?
-	if (
-		hero.x <= (monster.x + 32)
-		&& monster.x <= (hero.x + 32)
-		&& hero.y <= (monster.y + 32)
-		&& monster.y <= (hero.y + 32)
-	) {
-		++monstersCaught;
-		reset();
+	if (monster.isTouching(hero, player)) {
+		monster.reset(canvas);
 	}
 };
 
 // Draw everything
 var render = function () {
 	if (bgReady) {
-		ctx.drawImage(bgImage, 0, 0);
+		ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
 	}
 
 	if (heroReady) {
 		ctx.drawImage(heroImage, hero.x, hero.y);
 	}
 
-	if (monsterReady) {
-		ctx.drawImage(monsterImage, monster.x, monster.y);
+	if (monster.isReady()) {
+		monster.emit('render');
 	}
 
 	// Score
@@ -103,7 +143,8 @@ var render = function () {
 	ctx.font = "24px Helvetica";
 	ctx.textAlign = "left";
 	ctx.textBaseline = "top";
-	ctx.fillText("Goblins caught: " + monstersCaught, 32, 32);
+	ctx.fillText("Goblins caught: " + player.monstersCaught, 32, 32);
+	ctx.fillText("Goblin points: " + player.points, 32, 64);
 };
 
 // The main game loop
